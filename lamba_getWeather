@@ -1,0 +1,210 @@
+exports.handler = (event, context, callback) => {
+    try {
+        //console.log(`event.session.application.applicationId=${event.session.application.applicationId}`);
+        
+        //if (event.session.application.applicationId !== APP_ID) {
+        //     callback('Invalid Application ID');
+        //}
+        
+
+        if (event.session.new) {
+            onSessionStarted({ requestId: event.request.requestId }, event.session);
+        }
+
+        if (event.request.type === 'LaunchRequest') {
+            onLaunch(event.request,
+                event.session, (sessionAttributes, speechletResponse) => {
+                    callback(null, buildResponse(sessionAttributes, speechletResponse));
+                });
+        } else if (event.request.type === 'IntentRequest') {
+            onIntent(event.request,
+                event.session,
+                (sessionAttributes, speechletResponse) => {
+                    callback(null, buildResponse(sessionAttributes, speechletResponse));
+                });
+        } else if (event.request.type === 'SessionEndedRequest') {
+            onSessionEnded(event.request, event.session);
+            callback();
+        }
+    } catch (err) {
+        callback(err);
+    }
+};
+
+
+const isDebug = false; 
+const APP_ID = 'amzn1.ask.skill.....some numbers...';
+const url_weather = 'http://www.brecklandweather.com/currentout.txt';
+const APP_NAME = 'Weather skill';
+const STR_REPROMPT = '\nPlease ask me for the weather';
+
+
+
+function getWeather(intent, session, callback, numLetters) {
+    
+
+
+    let speechOutput = ''; 
+    let cardTitle = 'Weather output';
+    getWebRequest(url_weather, function webResonseCallback(err, data) {
+        if (err) {            
+            speechOutput = `Sorry something went wrong.`;
+            callback({}, buildSpeechletResponse(cardTitle, speechOutput, STR_REPROMPT));     
+        } else {
+            //if (isDebug) {"SolveAnagram::data = " + console.log(data)};
+            speechOutput = data;            
+            callback({}, buildSpeechletResponse(cardTitle, speechOutput,  STR_REPROMPT));
+        }    
+    });
+    
+    
+}
+
+//Simple welcome intent handler
+function getWelcomeResponse(callback) {
+    console.log("START session");
+    if (isDebug) {console.log("getWelcomeResponse()")}
+        
+    const cardTitle = APP_NAME;
+    const speechOutput = 'Welcome to '+APP_NAME+'. '+ STR_REPROMPT;
+        
+    // If the user either does not reply to the welcome message or says something that is not
+    // understood, they will be prompted again with this text.
+    const repromptText = STR_REPROMPT;
+    const shouldEndSession = false;
+
+    callback({}, buildSpeechletResponse(cardTitle, speechOutput, repromptText, shouldEndSession));
+}
+
+//Simple end session intent handler
+function handleSessionEndRequest(callback) {
+    console.log("END session");
+    
+    const cardTitle = 'Goodbye';
+    const speechOutput = 'Thanks for playing with '+APP_NAME+'.';
+    const shouldEndSession = true;
+
+    callback({}, buildSpeechletResponse(cardTitle, speechOutput, null, shouldEndSession));
+}
+
+
+
+
+function buildSpeechletResponse(title, output, repromptText, shouldEndSession) {
+    if (isDebug) {console.log(`buildSpeechletResponse(title:${title}, shouldEndSession:${shouldEndSession}, reprompt:${repromptText})`)}
+    return {
+        outputSpeech: {
+            type: 'PlainText',
+            text: output,
+        },
+        card: {
+            type: 'Simple',
+            title: `${title}`,
+            content: `${output}`,
+        },
+        reprompt: {
+            outputSpeech: {
+                type: 'PlainText',
+                text: repromptText,
+            },
+        },
+        shouldEndSession,
+    };
+}
+
+function buildResponse(sessionAttributes, speechletResponse) {
+    return {
+        version: '2.0',
+        response: speechletResponse,
+        sessionAttributes: sessionAttributes,        
+    };
+}
+
+
+//----------------- Web service helper ----------------------//
+var http = require('http');
+ 
+function getWebRequest(url,doWebRequestCallBack) {
+    try
+    {
+        http.get(url, function (res) {
+            var webResponseString = '';
+            if (isDebug) {console.log('Status Code: ' + res.statusCode)};
+     
+            if (res.statusCode != 200) {
+                doWebRequestCallBack(new Error("Non 200 Response"));
+                return;
+            }
+     
+            res.on('data', function (data) {
+                webResponseString += data;
+            });
+     
+            res.on('end', function () {
+                //if (isDebug) {console.log('getWebRequest::Got some data: '+ webResponseString)};     
+                
+                //the weather isn't JSON so just return the string
+                //var webResponseObject = JSON.parse(webResponseString);   
+                doWebRequestCallBack(null, webResponseString);
+                
+                
+            });
+        }).on('error', function (e) {
+            if (isDebug) {console.log("Communications error: " + e.message)};
+            doWebRequestCallBack(new Error(e.message));
+        });
+    } 
+    catch(err)
+    {
+        doWebRequestCallBack(new Error(err.message));
+    }
+}
+
+
+
+// --------------- Events -----------------------
+
+/**
+ * Called when the session starts.
+ */
+function onSessionStarted(sessionStartedRequest, session) {
+    //console.log(`onSessionStarted requestId=${sessionStartedRequest.requestId}, sessionId=${session.sessionId}`);
+}
+
+/**
+ * Called when the user launches the skill without specifying what they want.
+ */
+function onLaunch(launchRequest, session, callback) {
+    //console.log(`onLaunch requestId=${launchRequest.requestId}, sessionId=${session.sessionId}`);
+
+    // Dispatch to your skill's launch.
+    getWelcomeResponse(callback);
+}
+
+
+/**
+ * Called when the user specifies an intent for this skill.
+ */
+function onIntent(intentRequest, session, callback) {
+    
+    const intent = intentRequest.intent;
+    const intentName = intentRequest.intent.name;
+    
+    console.log("  ");
+    console.log("== New Intent ==");
+    console.log(`onIntent(${intentName})`);
+
+    if (intentName === 'GetWeather') {
+        getWeather(intent, session, callback,1); 
+    } 
+    
+}
+
+/**
+ * Called when the user ends the session.
+ * Is not called when the skill returns shouldEndSession=true.
+ */
+function onSessionEnded(sessionEndedRequest, session) {
+    //console.log(`onSessionEnded requestId=${sessionEndedRequest.requestId}, sessionId=${session.sessionId}`);
+    // Add cleanup logic here
+}
